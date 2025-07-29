@@ -2,62 +2,56 @@ name: CI/CD DevSecOps
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
 
-    permissions:
-      actions: read
-      contents: read
-      security-events: write  
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
 
-    - name: Run Trivy (generate SARIF)
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
-        format: sarif
-        output: trivy-results.sarif
-        exit-code: 0
-        severity: CRITICAL,HIGH
+      - name: Run Trivy (scan image)
+        uses: aquasecurity/trivy-action@v0.19.0
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: 0
+          severity: HIGH,CRITICAL
 
-    - name: Upload Trivy scan to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: trivy-results.sarif
+      - name: Upload Trivy report to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-results.sarif
 
-    - name: Install Checkov
-      run: pip install checkov
+      - name: Install Checkov
+        run: pip install checkov
 
-    - name: Run Checkov (generate SARIF)
-      run: |
-        checkov -d . -o sarif > checkov-results.sarif || true
+      - name: Run Checkov (scan IaC)
+        run: checkov -d . --output-file-path checkov-results.sarif --output sarif || true
 
-    - name: Upload Checkov scan to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: checkov-results.sarif
+      - name: Upload Checkov report to GitHub Security tab
+        if: ${{ hashFiles('checkov-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: checkov-results.sarif
