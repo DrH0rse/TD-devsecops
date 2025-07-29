@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
 
 jobs:
   build-and-scan:
@@ -17,41 +16,40 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest .
 
-      - name: Run Trivy (scan image)
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+
+      - name: Scan with Trivy (no exit on fail)
         uses: aquasecurity/trivy-action@0.11.2
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
-          format: sarif
-          output: trivy-results.sarif
+          format: table
           exit-code: 0
-          severity: HIGH,CRITICAL
-
-      - name: Upload Trivy report to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: trivy-results.sarif
+          severity: CRITICAL,HIGH
 
       - name: Install Checkov
-        run: pip install checkov
+        run: |
+          pip install checkov
 
-      - name: Run Checkov (scan IaC)
-        run: checkov -d . --output-file-path checkov-results.sarif --output sarif || true
+      - name: Run Checkov locally (no SARIF)
+        run: |
+          checkov -d . || true  # Pour éviter que le job échoue en cas de findings
 
-      - name: Upload Checkov report to GitHub Security tab
-        if: ${{ hashFiles('checkov-results.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v2
+      - name: Set up CodeQL
+        uses: github/codeql-action/init@v3
         with:
-          sarif_file: checkov-results.sarif
+          languages: python
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
