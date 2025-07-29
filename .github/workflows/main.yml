@@ -31,7 +31,7 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
 
       - name: Run Trivy (scan image)
-        uses: aquasecurity/trivy-action@v0.19.0
+        uses: aquasecurity/trivy-action@0.11.2
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
           format: sarif
